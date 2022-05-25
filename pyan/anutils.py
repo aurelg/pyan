@@ -34,13 +34,17 @@ def get_module_name(filename, root: str = None):
 
     # find the module root - walk up the tree and check if it contains .py files - if yes. it is the new root
     directories = [(module_path, True)]
+
     if root is None:
         while directories[0][0] != os.path.dirname(directories[0][0]):
             potential_root = os.path.dirname(directories[0][0])
             is_root = any([f == "__init__.py" for f in os.listdir(potential_root)])
             directories.insert(0, (potential_root, is_root))
 
+            if is_root:
+                break
         # keep directories where itself of parent is root
+
         while not directories[0][1]:
             directories.pop(0)
 
@@ -50,11 +54,13 @@ def get_module_name(filename, root: str = None):
             directories.insert(0, (potential_root, True))
 
     mod_name = ".".join([os.path.basename(f[0]) for f in directories])
+
     return mod_name
 
 
 def format_alias(x):
     """Return human-readable description of an ast.alias (used in Import and ImportFrom nodes)."""
+
     if not isinstance(x, ast.alias):
         raise TypeError("Can only format an ast.alias; got %s" % type(x))
 
@@ -66,8 +72,10 @@ def format_alias(x):
 
 def get_ast_node_name(x):
     """Return human-readable name of ast.Attribute or ast.Name. Pass through anything else."""
+
     if isinstance(x, ast.Attribute):
         # x.value might also be an ast.Attribute (think "x.y.z")
+
         return "%s.%s" % (get_ast_node_name(x.value), x.attr)
     elif isinstance(x, ast.Name):
         return x.id
@@ -108,6 +116,7 @@ def resolve_method_resolution_order(class_base_nodes, logger):
 
     def C3_find_good_head(heads, tails):  # find an element of heads which is not in any of the tails
         flat_tails = reduce(add, tails, [])  # flatten the outer level
+
         for hd in heads:
             if hd not in flat_tails:
                 break
@@ -115,6 +124,7 @@ def resolve_method_resolution_order(class_base_nodes, logger):
             raise LinearizationImpossible(
                 "MRO linearization impossible; cyclic dependency detected. heads: %s, tails: %s" % (heads, tails)
             )
+
         return hd
 
     def remove_all(elt, lst):  # remove all occurrences of elt from lst, return a copy
@@ -125,9 +135,11 @@ def resolve_method_resolution_order(class_base_nodes, logger):
 
     def C3_merge(lists):
         out = []
+
         while True:
             logger.debug("MRO: C3 merge: out: %s, lists: %s" % (out, lists))
             heads = [head(lst) for lst in lists if head(lst) is not None]
+
             if not len(heads):
                 break
             tails = [tail(lst) for lst in lists]
@@ -136,6 +148,7 @@ def resolve_method_resolution_order(class_base_nodes, logger):
             logger.debug("MRO: C3 merge: chose head %s" % (hd))
             out.append(hd)
             lists = remove_all_in(hd, lists)
+
         return out
 
     mro = {}  # result
@@ -145,13 +158,16 @@ def resolve_method_resolution_order(class_base_nodes, logger):
         def C3_linearize(node):
             logger.debug("MRO: C3 linearizing %s" % (node))
             seen.add(node)
+
             if node not in memo:
                 #  unknown class                     or no ancestors
+
                 if node not in class_base_nodes or not len(class_base_nodes[node]):
                     memo[node] = [node]
                 else:  # known and has ancestors
                     lists = []
                     # linearization of parents...
+
                     for baseclass_node in class_base_nodes[node]:
                         if baseclass_node not in seen:
                             lists.append(C3_linearize(baseclass_node))
@@ -161,6 +177,7 @@ def resolve_method_resolution_order(class_base_nodes, logger):
                     logger.debug("MRO: C3 merging %s" % (lists))
                     memo[node] = [node] + C3_merge(lists)
             logger.debug("MRO: C3 linearized %s, result %s" % (node, memo[node]))
+
             return memo[node]
 
         for node in class_base_nodes:
@@ -179,17 +196,21 @@ def resolve_method_resolution_order(class_base_nodes, logger):
 
         def lookup_bases_recursive(node):
             seen.add(node)
+
             if node not in memo:
                 out = [node]  # first look up in obj itself...
+
                 if node in class_base_nodes:  # known class?
                     for baseclass_node in class_base_nodes[node]:  # ...then in its bases
                         if baseclass_node not in seen:
                             out.append(baseclass_node)
                             out.extend(lookup_bases_recursive(baseclass_node))
                 memo[node] = out
+
             return memo[node]
 
         mro = {}
+
         for node in class_base_nodes:
             logger.debug("MRO: generic fallback: analyzing class %s" % (node))
             seen = set()  # break cycles (separately for each class we start from)
@@ -201,8 +222,6 @@ def resolve_method_resolution_order(class_base_nodes, logger):
 class UnresolvedSuperCallError(Exception):
     """For specifically signaling an unresolved super()."""
 
-    pass
-
 
 class Scope:
     """Adaptor that makes scopes look somewhat like those from the Python 2
@@ -211,6 +230,7 @@ class Scope:
     def __init__(self, table):
         """table: SymTable instance from symtable.symtable()"""
         name = table.get_name()
+
         if name == "top":
             name = ""  # Pyan defines the top level as anonymous
         self.name = name
@@ -250,6 +270,7 @@ class ExecuteInInnerScope:
 
         analyzer.name_stack.append(scopename)
         inner_ns = analyzer.get_node_of_current_namespace().get_name()
+
         if inner_ns not in analyzer.scopes:
             analyzer.name_stack.pop()
             raise ValueError("Unknown scope '%s'" % (inner_ns))
@@ -278,6 +299,7 @@ class ExecuteInInnerScope:
         from_node = analyzer.get_node_of_current_namespace()
         ns = from_node.get_name()
         to_node = analyzer.get_node(ns, scopename, None, flavor=Flavor.NAMESPACE)
+
         if analyzer.add_defines_edge(from_node, to_node):
             analyzer.logger.info("Def from %s to %s %s" % (from_node, scopename, to_node))
         analyzer.last_value = to_node  # Make this inner scope node assignable to track its uses.
